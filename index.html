@@ -1,0 +1,1346 @@
+<!DOCTYPE html>
+<html lang="pt-BR" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mapeando com o Coren-GO</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#5D5CDE',
+                        secondary: '#4A4A4A',
+                        accent: '#2a7d8c'
+                    }
+                }
+            },
+            darkMode: 'class'
+        }
+    </script>
+    <style>
+        .process-box {
+            min-height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 10px;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+        .process-box:hover {
+            transform: scale(1.02);
+        }
+        .drag-item {
+            cursor: grab;
+            user-select: none;
+            padding: 8px;
+            margin: 4px;
+            background-color: #f0f4f8;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+        }
+        .drop-area {
+            min-height: 60px;
+            border: 2px dashed #ccc;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .drop-area.active {
+            border-color: #5D5CDE;
+            background-color: rgba(93, 92, 222, 0.1);
+        }
+        
+        .quiz-option {
+            transition: all 0.3s;
+        }
+        
+        .quiz-option:hover {
+            background-color: rgba(93, 92, 222, 0.1);
+        }
+        
+        .quiz-option.selected {
+            background-color: rgba(93, 92, 222, 0.2);
+            border-color: #5D5CDE;
+        }
+        
+        .quiz-option.correct {
+            background-color: rgba(34, 197, 94, 0.2);
+            border-color: #22c55e;
+        }
+        
+        .quiz-option.incorrect {
+            background-color: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+        }
+        
+        /* Transições suaves entre os módulos */
+        .module-content {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.5s, transform 0.5s;
+        }
+        
+        .module-content.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        /* Animação para o diagrama de processo */
+        @keyframes flowAnimation {
+            0% { stroke-dashoffset: 100; }
+            100% { stroke-dashoffset: 0; }
+        }
+        
+        .flow-arrow {
+            stroke-dasharray: 10;
+            animation: flowAnimation 1s infinite linear;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-gray-900 min-h-screen">
+    <div id="modal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-lg max-w-lg w-full">
+            <h3 id="modal-title" class="text-xl font-bold mb-4 text-gray-800 dark:text-white"></h3>
+            <div id="modal-content" class="text-gray-600 dark:text-gray-300"></div>
+            <div class="mt-6 flex justify-end">
+                <button onclick="closeModal()" class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90">Fechar</button>
+            </div>
+        </div>
+    </div>
+
+    <header class="bg-white dark:bg-gray-800 shadow">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
+            <div class="flex justify-between items-center">
+                <div class="flex items-center">
+                    <img src="https://www.corengo.org.br/wp-content/uploads/2022/08/logo_homenagem.png" alt="Logo Coren-GO" class="h-12 mr-3">
+                    <h1 class="text-2xl font-bold text-gray-900 dark:text-white">Mapeando com o Coren-GO</h1>
+                </div>
+                <button id="theme-toggle" class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700">
+                    <svg id="dark-icon" class="w-6 h-6 text-gray-500 dark:text-gray-400 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                    </svg>
+                    <svg id="light-icon" class="w-6 h-6 text-gray-500 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+            <!-- Sidebar Navigation -->
+            <div class="md:col-span-1 bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                <h2 class="text-xl font-semibold mb-4 text-gray-800 dark:text-white">Módulos</h2>
+                <nav>
+                    <ul class="space-y-2">
+                        <li>
+                            <button onclick="changeModule('intro')" class="module-btn w-full text-left px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium" data-module="intro">
+                                Introdução
+                            </button>
+                        </li>
+                        <li>
+                            <button onclick="changeModule('module1')" class="module-btn w-full text-left px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium" data-module="module1">
+                                Fundamentos do Mapeamento
+                            </button>
+                        </li>
+                        <li>
+                            <button onclick="changeModule('module2')" class="module-btn w-full text-left px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium" data-module="module2">
+                                Mapeamento e Documentação
+                            </button>
+                        </li>
+                        <li>
+                            <button onclick="changeModule('module3')" class="module-btn w-full text-left px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium" data-module="module3">
+                                Análise e Melhoria
+                            </button>
+                        </li>
+                        <li>
+                            <button onclick="changeModule('module4')" class="module-btn w-full text-left px-4 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium" data-module="module4">
+                                Exemplos Práticos
+                            </button>
+                        </li>
+                    </ul>
+                </nav>
+                
+                <div class="mt-8 p-4 bg-blue-50 dark:bg-gray-700 rounded-lg">
+                    <h3 class="font-medium text-blue-800 dark:text-blue-300 mb-2">Precisa de ajuda?</h3>
+                    <p class="text-sm text-blue-600 dark:text-blue-200">Consulte o Manual de Procedimentos Administrativos.</p>
+                </div>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="md:col-span-4 bg-white dark:bg-gray-800 p-6 rounded-lg shadow">
+                <!-- Intro Module -->
+                <div id="intro" class="module-content active">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Bem-vindo ao Mapeamento de Processos</h2>
+                    
+                    <div class="mb-8">
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            Este aplicativo foi desenvolvido para auxiliar os funcionários do Coren-GO a compreender e aplicar os princípios do mapeamento de processos, com base no Manual de Procedimentos Administrativos do Cofen e nos conceitos do BPM CBOK.
+                        </p>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            Através deste treinamento interativo, você aprenderá:
+                        </p>
+                        <ul class="list-disc pl-5 text-gray-600 dark:text-gray-300 space-y-2">
+                            <li>Fundamentos do mapeamento de processos</li>
+                            <li>Como documentar processos de forma eficiente</li>
+                            <li>Técnicas para análise e melhoria de processos</li>
+                            <li>Aplicação prática em processos específicos do Coren-GO</li>
+                        </ul>
+                    </div>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                        <div class="bg-blue-50 dark:bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-bold text-blue-800 dark:text-blue-300 mb-2">Por que mapear processos?</h3>
+                            <p class="text-blue-600 dark:text-blue-200 text-sm">
+                                O mapeamento de processos ajuda a identificar gargalos, eliminar redundâncias e padronizar procedimentos, resultando em maior eficiência e qualidade no atendimento.
+                            </p>
+                        </div>
+                        <div class="bg-green-50 dark:bg-gray-700 p-4 rounded-lg">
+                            <h3 class="font-bold text-green-800 dark:text-green-300 mb-2">Benefícios para o Coren-GO</h3>
+                            <p class="text-green-600 dark:text-green-200 text-sm">
+                                Processos bem mapeados facilitam o treinamento de novos funcionários, aumentam a transparência e ajudam a garantir conformidade com as normas do Cofen.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-center mt-8">
+                        <button onclick="changeModule('module1')" class="px-6 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all flex items-center">
+                            Começar o treinamento
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Module 1: Fundamentos do Mapeamento de Processos -->
+                <div id="module1" class="module-content hidden">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Módulo 1: Fundamentos do Mapeamento de Processos</h2>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">O que é um processo?</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            De acordo com o BPM CBOK, um <strong>processo</strong> é uma agregação de atividades e comportamentos executados por humanos ou máquinas para alcançar um ou mais resultados.
+                        </p>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            No contexto do Coren-GO, os processos representam a forma como os serviços são prestados aos profissionais de enfermagem e como as atividades administrativas são executadas internamente.
+                        </p>
+                    </div>
+                    
+                    <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg mb-8">
+                        <h3 class="font-bold text-gray-800 dark:text-white mb-3">Elementos de um processo:</h3>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-semibold text-primary mb-1">Entradas</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">Informações ou materiais que iniciam ou são transformados pelo processo</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">Ex: Documentação de inscrição de um profissional</p>
+                            </div>
+                            <div class="bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-semibold text-primary mb-1">Atividades</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">Ações realizadas para transformar entradas em saídas</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">Ex: Verificação de documentos, registro em sistema</p>
+                            </div>
+                            <div class="bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-semibold text-primary mb-1">Saídas</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">Resultados produzidos pelo processo</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">Ex: Carteira profissional emitida</p>
+                            </div>
+                            <div class="bg-white dark:bg-gray-800 p-3 rounded border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-semibold text-primary mb-1">Pessoas/Papéis</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">Quem executa as atividades do processo</p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1 italic">Ex: Atendente, analista, coordenador</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Tipos de Processos no Coren-GO</h3>
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                <thead>
+                                    <tr>
+                                        <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-gray-700 dark:text-gray-300 font-semibold border-b">Tipo</th>
+                                        <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-gray-700 dark:text-gray-300 font-semibold border-b">Descrição</th>
+                                        <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-gray-700 dark:text-gray-300 font-semibold border-b">Exemplos</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 font-medium">Processos Primários</td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">Processos essenciais que entregam valor diretamente aos clientes/usuários</td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">Inscrição profissional, Processo ético, Fiscalização</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 font-medium">Processos de Suporte</td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">Apoiam os processos primários e não são visíveis ao público</td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">Departamento financeiro, Negociação, Protocolo e arquivo</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 font-medium">Processos de Gerenciamento</td>
+                                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">Monitoram, controlam e garantem o funcionamento dos demais processos</td>
+                                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">Planejamento estratégico, PPA 2025/2027, Auditoria interna</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Quiz: Conceitos Básicos</h3>
+                        <div id="quiz1" class="space-y-4">
+                            <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                <p class="font-medium text-gray-800 dark:text-white mb-3">1. O que é um processo segundo o BPM CBOK?</p>
+                                <div class="space-y-2">
+                                    <div class="quiz-option p-2 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer" data-correct="true">
+                                        <p class="text-gray-700 dark:text-gray-300">Uma agregação de atividades e comportamentos executados para alcançar um ou mais resultados</p>
+                                    </div>
+                                    <div class="quiz-option p-2 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer">
+                                        <p class="text-gray-700 dark:text-gray-300">Um conjunto de regras e procedimentos que devem ser seguidos</p>
+                                    </div>
+                                    <div class="quiz-option p-2 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer">
+                                        <p class="text-gray-700 dark:text-gray-300">Uma sequência de tarefas realizadas por um departamento específico</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+                                <p class="font-medium text-gray-800 dark:text-white mb-3">2. Qual destes é um exemplo de processo primário no Coren-GO?</p>
+                                <div class="space-y-2">
+                                    <div class="quiz-option p-2 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer">
+                                        <p class="text-gray-700 dark:text-gray-300"> Limpar o auditorio</p>
+                                    </div>
+                                    <div class="quiz-option p-2 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer" data-correct="true">
+                                        <p class="text-gray-700 dark:text-gray-300">Processo de inscrição profissional</p>
+                                    </div>
+                                    <div class="quiz-option p-2 border border-gray-200 dark:border-gray-600 rounded-md cursor-pointer">
+                                        <p class="text-gray-700 dark:text-gray-300">Solicitar café para a Copa</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="mt-4 text-right">
+                            <button id="checkQuiz1" class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90">Verificar Respostas</button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-between mt-8">
+                        <button onclick="changeModule('intro')" class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Anterior
+                        </button>
+                        <button onclick="changeModule('module2')" class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 flex items-center">
+                            Próximo
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Module 2: Mapeamento e Documentação de Processos -->
+                <div id="module2" class="module-content hidden">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Módulo 2: Mapeamento e Documentação de Processos</h2>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Notações para Mapeamento</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            Para representar visualmente os processos, utilizamos diferentes notações. As mais comuns são:
+                        </p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-semibold text-primary mb-2">Fluxograma</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">Uma representação gráfica simples que usa símbolos básicos como retângulos para atividades e losangos para decisões.</p>
+                                <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded">
+                                    <img src="https://i.imgur.com/F7SZgZN.png" alt="Exemplo de Fluxograma" class="mx-auto">
+                                </div>
+                            </div>
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-semibold text-primary mb-2">BPMN (Business Process Model and Notation)</h4>
+                                <p class="text-sm text-gray-600 dark:text-gray-300 mb-3">Uma notação mais robusta e padronizada, com maior capacidade para representar processos complexos.</p>
+                                <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded">
+                                    <img src="https://i.imgur.com/3FGxbUX.png" alt="Exemplo de BPMN" class="mx-auto">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-blue-50 dark:bg-gray-700 p-4 rounded-lg mb-6">
+                            <h4 class="font-semibold text-blue-800 dark:text-blue-300 mb-2">Dica</h4>
+                            <p class="text-blue-600 dark:text-blue-200 text-sm">
+                                Para processos mais simples do Coren-GO, o fluxograma é geralmente suficiente. Para processos mais complexos que envolvem múltiplos departamentos ou interações com sistemas externos, o BPMN pode ser mais adequado.
+                            </p>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Elementos Básicos do Fluxograma</h3>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
+                                <thead>
+                                    <tr>
+                                        <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-gray-700 dark:text-gray-300 font-semibold border-b">Símbolo</th>
+                                        <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-gray-700 dark:text-gray-300 font-semibold border-b">Nome</th>
+                                        <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-gray-700 dark:text-gray-300 font-semibold border-b">Descrição</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                                            <div class="flex justify-center">
+                                                <div class="w-12 h-12 rounded-full border-2 border-gray-400 dark:border-gray-500 flex items-center justify-center">
+                                                    <span class="text-gray-600 dark:text-gray-300">I/F</span>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 font-medium">Início/Fim</td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">Indica o início ou fim do processo</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                                            <div class="flex justify-center">
+                                                <div class="w-12 h-8 border-2 border-gray-400 dark:border-gray-500 flex items-center justify-center">
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 font-medium">Atividade</td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">Representa uma ação que deve ser executada</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700">
+                                            <div class="flex justify-center">
+                                                <div class="w-12 h-12 border-2 border-gray-400 dark:border-gray-500 rotate-45 flex items-center justify-center">
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 font-medium">Decisão</td>
+                                        <td class="px-4 py-3 border-b border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-300">Indica um ponto de decisão (sim/não)</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="px-4 py-3">
+                                            <div class="flex justify-center">
+                                                <svg width="50" height="30" viewBox="0 0 50 30" class="text-gray-400 dark:text-gray-500">
+                                                    <line x1="0" y1="15" x2="50" y2="15" stroke="currentColor" stroke-width="2" />
+                                                    <polygon points="50,15 40,10 40,20" fill="currentColor" />
+                                                </svg>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3 font-medium">Fluxo</td>
+                                        <td class="px-4 py-3 text-gray-600 dark:text-gray-300">Indica a direção do fluxo de uma etapa para outra</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Atividade Prática: Construa um Fluxograma</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            Arraste os elementos abaixo para construir um fluxograma simples de atendimento no Coren-GO:
+                        </p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                            <div id="elementsList" class="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                                <h4 class="font-medium text-gray-800 dark:text-white mb-2">Elementos disponíveis:</h4>
+                                <div class="space-y-2">
+                                    <div class="drag-item bg-white dark:bg-gray-800" draggable="true" data-type="start">Início: Recebimento de solicitação</div>
+                                    <div class="drag-item bg-white dark:bg-gray-800" draggable="true" data-type="activity">Verificar documentação</div>
+                                    <div class="drag-item bg-white dark:bg-gray-800" draggable="true" data-type="decision">Documentação completa?</div>
+                                    <div class="drag-item bg-white dark:bg-gray-800" draggable="true" data-type="activity">Solicitar documentos faltantes</div>
+                                    <div class="drag-item bg-white dark:bg-gray-800" draggable="true" data-type="activity">Registrar no sistema</div>
+                                    <div class="drag-item bg-white dark:bg-gray-800" draggable="true" data-type="end">Fim: Processo concluído</div>
+                                </div>
+                            </div>
+                            
+                            <div class="md:col-span-2 bg-white dark:bg-gray-800 p-3 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600">
+                                <h4 class="font-medium text-gray-800 dark:text-white mb-2">Arraste para construir o fluxo:</h4>
+                                <div id="dropArea" class="drop-area min-h-[300px]">
+                                    <p class="text-center text-gray-400 dark:text-gray-500 pt-12">Arraste os elementos e solte aqui</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="flex justify-end mb-4">
+                            <button id="resetFlow" class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700">
+                                Reiniciar Fluxo
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Documentação Complementar</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            Além do fluxograma, é importante documentar informações adicionais sobre o processo:
+                        </p>
+                        
+                        <div class="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
+                            <div class="border-b border-gray-200 dark:border-gray-700 px-4 py-3 bg-gray-50 dark:bg-gray-700">
+                                <h4 class="font-medium text-gray-800 dark:text-white">Ficha de Processo</h4>
+                            </div>
+                            <div class="p-4">
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Nome do Processo:</p>
+                                        <input type="text" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300" placeholder="Ex: Processo de Inscrição Profissional">
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Responsável:</p>
+                                        <input type="text" class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300" placeholder="Ex: Coordenador de Registro">
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Objetivo:</p>
+                                        <textarea class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300" rows="2" placeholder="Ex: Registrar profissionais de enfermagem conforme normativas do Cofen"></textarea>
+                                    </div>
+                                    <div>
+                                        <p class="text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">Indicadores:</p>
+                                        <textarea class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300" rows="2" placeholder="Ex: Tempo médio de processamento, % de inscrições com documentação completa"></textarea>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-between mt-8">
+                        <button onclick="changeModule('module1')" class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Anterior
+                        </button>
+                        <button onclick="changeModule('module3')" class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 flex items-center">
+                            Próximo
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Module 3: Análise e Melhoria de Processos -->
+                <div id="module3" class="module-content hidden">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Módulo 3: Análise e Melhoria de Processos</h2>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Identificando Problemas nos Processos</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            Antes de melhorar um processo, é necessário identificar os problemas existentes. Alguns sinais comuns de problemas incluem:
+                        </p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow">
+                                <div class="flex items-center mb-2">
+                                    <svg class="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                                    </svg>
+                                    <h4 class="font-semibold text-gray-800 dark:text-white">Gargalos</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">
+                                    Etapas do processo que limitam a capacidade total, causando acúmulo de trabalho e atrasos.
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                                    Ex: Inscrições que aguardam revisão por muitos dias por falta de analistas.
+                                </p>
+                            </div>
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow">
+                                <div class="flex items-center mb-2">
+                                    <svg class="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M4 2a1 1 0 011 1v2.101a7.002 7.002 0 0111.601 2.566 1 1 0 11-1.885.666A5.002 5.002 0 005.999 7H9a1 1 0 010 2H4a1 1 0 01-1-1V3a1 1 0 011-1zm.008 9.057a1 1 0 011.276.61A5.002 5.002 0 0014.001 13H11a1 1 0 110-2h5a1 1 0 011 1v5a1 1 0 11-2 0v-2.101a7.002 7.002 0 01-11.601-2.566 1 1 0 01.61-1.276z" clip-rule="evenodd" />
+                                    </svg>
+                                    <h4 class="font-semibold text-gray-800 dark:text-white">Retrabalho</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">
+                                    Atividades que precisam ser refeitas devido a erros ou falta de padronização.
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                                    Ex: Documentação devolvida por estar incompleta, exigindo novo contato com o profissional.
+                                </p>
+                            </div>
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow">
+                                <div class="flex items-center mb-2">
+                                    <svg class="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M11 3a1 1 0 10-2 0v1a1 1 0 102 0V3zM15.657 5.757a1 1 0 00-1.414-1.414l-.707.707a1 1 0 001.414 1.414l.707-.707zM18 10a1 1 0 01-1 1h-1a1 1 0 110-2h1a1 1 0 011 1zM5.05 6.464A1 1 0 106.464 5.05l-.707-.707a1 1 0 00-1.414 1.414l.707.707zM5 10a1 1 0 01-1 1H3a1 1 0 110-2h1a1 1 0 011 1zM8 16v-1h4v1a2 2 0 11-4 0zM12 14c.015-.34.208-.646.477-.859a4 4 0 10-4.954 0c.27.213.462.519.476.859h4.002z" />
+                                    </svg>
+                                    <h4 class="font-semibold text-gray-800 dark:text-white">Atividades que não agregam valor</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">
+                                    Etapas que não contribuem para o resultado final do processo.
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                                    Ex: Múltiplas aprovações para processos simples.
+                                </p>
+                            </div>
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 hover:shadow-md transition-shadow">
+                                <div class="flex items-center mb-2">
+                                    <svg class="w-5 h-5 text-red-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M3 5a2 2 0 012-2h10a2 2 0 012 2v8a2 2 0 01-2 2h-2.22l.123.489.804.804A1 1 0 0113 18H7a1 1 0 01-.707-1.707l.804-.804L7.22 15H5a2 2 0 01-2-2V5zm5.771 7H5V5h10v7H8.771z" clip-rule="evenodd" />
+                                    </svg>
+                                    <h4 class="font-semibold text-gray-800 dark:text-white">Falta de automação</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">
+                                    Tarefas manuais e repetitivas que poderiam ser automatizadas.
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                                    Ex: Digitação manual de dados que poderiam ser capturados por um sistema.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Técnicas de Análise</h3>
+                        
+                        <div class="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden mb-6">
+                            <div class="border-b border-gray-200 dark:border-gray-700">
+                                <nav class="-mb-px flex">
+                                    <button id="tab1" class="tab-btn active text-primary border-primary px-4 py-3 border-b-2 font-medium text-sm">Análise de Valor</button>
+                                    <button id="tab2" class="tab-btn text-gray-500 hover:text-gray-700 hover:border-gray-300 px-4 py-3 border-b border-transparent font-medium text-sm">Análise de Tempo</button>
+                                    <button id="tab3" class="tab-btn text-gray-500 hover:text-gray-700 hover:border-gray-300 px-4 py-3 border-b border-transparent font-medium text-sm">5 Porquês</button>
+                                </nav>
+                            </div>
+                            <div id="tabContent1" class="tab-content active p-4">
+                                <h4 class="font-medium text-gray-800 dark:text-white mb-3">Análise de Valor Agregado</h4>
+                                <p class="text-gray-600 dark:text-gray-300 mb-3">
+                                    Classifica cada atividade do processo em uma das três categorias:
+                                </p>
+                                <ul class="space-y-2">
+                                    <li class="flex items-start">
+                                        <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 mr-2">VA</span>
+                                        <div>
+                                            <span class="font-medium text-gray-700 dark:text-gray-300">Agrega Valor</span>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">Atividades essenciais que o cliente valoriza.</p>
+                                        </div>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200 mr-2">BN</span>
+                                        <div>
+                                            <span class="font-medium text-gray-700 dark:text-gray-300">Necessário ao Negócio</span>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">Atividades obrigatórias devido a regulamentações ou políticas.</p>
+                                        </div>
+                                    </li>
+                                    <li class="flex items-start">
+                                        <span class="inline-flex items-center justify-center h-6 w-6 rounded-full bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 mr-2">NVA</span>
+                                        <div>
+                                            <span class="font-medium text-gray-700 dark:text-gray-300">Não Agrega Valor</span>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">Atividades que podem ser eliminadas sem afetar a qualidade.</p>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div id="tabContent2" class="tab-content hidden p-4">
+                                <h4 class="font-medium text-gray-800 dark:text-white mb-3">Análise de Tempo de Ciclo</h4>
+                                <p class="text-gray-600 dark:text-gray-300 mb-3">
+                                    Identifica quanto tempo cada atividade leva e onde ocorrem os atrasos:
+                                </p>
+                                <div class="overflow-x-auto">
+                                    <table class="min-w-full bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700">
+                                        <thead>
+                                            <tr>
+                                                <th class="px-4 py-2 border-b text-left">Etapa do Processo</th>
+                                                <th class="px-4 py-2 border-b text-left">Tempo de Processamento</th>
+                                                <th class="px-4 py-2 border-b text-left">Tempo de Espera</th>
+                                                <th class="px-4 py-2 border-b text-left">Tempo Total</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody class="text-gray-700 dark:text-gray-300">
+                                            <tr>
+                                                <td class="px-4 py-2 border-b">Recebimento da documentação</td>
+                                                <td class="px-4 py-2 border-b">10 min</td>
+                                                <td class="px-4 py-2 border-b">0 min</td>
+                                                <td class="px-4 py-2 border-b">10 min</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-2 border-b">Aguardando análise</td>
+                                                <td class="px-4 py-2 border-b">0 min</td>
+                                                <td class="px-4 py-2 border-b">2 dias</td>
+                                                <td class="px-4 py-2 border-b">2 dias</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-2 border-b">Análise documental</td>
+                                                <td class="px-4 py-2 border-b">30 min</td>
+                                                <td class="px-4 py-2 border-b">0 min</td>
+                                                <td class="px-4 py-2 border-b">30 min</td>
+                                            </tr>
+                                            <tr>
+                                                <td class="px-4 py-2">Total</td>
+                                                <td class="px-4 py-2">40 min</td>
+                                                <td class="px-4 py-2">2 dias</td>
+                                                <td class="px-4 py-2 font-medium">2 dias e 40 min</td>
+                                            </tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <p class="text-sm text-gray-500 dark:text-gray-400 mt-3">
+                                    Observação: O tempo de espera representa 98% do tempo total do processo!
+                                </p>
+                            </div>
+                            <div id="tabContent3" class="tab-content hidden p-4">
+                                <h4 class="font-medium text-gray-800 dark:text-white mb-3">Técnica dos 5 Porquês</h4>
+                                <p class="text-gray-600 dark:text-gray-300 mb-3">
+                                    Uma técnica para identificar a causa-raiz de um problema, perguntando "por quê?" repetidamente:
+                                </p>
+                                <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                                    <p class="font-medium text-gray-800 dark:text-white mb-2">Problema: Atrasos na emissão de carteiras profissionais</p>
+                                    <ul class="space-y-2 text-gray-600 dark:text-gray-300">
+                                        <li class="pl-4 border-l-2 border-gray-300 dark:border-gray-600">
+                                            <span class="font-medium">Por que há atrasos?</span> Porque os processos ficam parados aguardando aprovação.
+                                        </li>
+                                        <li class="pl-4 border-l-2 border-gray-300 dark:border-gray-600">
+                                            <span class="font-medium">Por que ficam aguardando aprovação?</span> Porque apenas um coordenador pode aprovar.
+                                        </li>
+                                        <li class="pl-4 border-l-2 border-gray-300 dark:border-gray-600">
+                                            <span class="font-medium">Por que apenas um coordenador pode aprovar?</span> Porque o sistema só permite acesso a um usuário com esse perfil.
+                                        </li>
+                                        <li class="pl-4 border-l-2 border-gray-300 dark:border-gray-600">
+                                            <span class="font-medium">Por que o sistema só permite um usuário?</span> Porque foi configurado assim quando foi implementado.
+                                        </li>
+                                        <li class="pl-4 border-l-2 border-gray-300 dark:border-gray-600">
+                                            <span class="font-medium">Por que foi configurado assim?</span> Porque não houve análise das necessidades reais do processo.
+                                        </li>
+                                    </ul>
+                                    <p class="text-sm text-gray-500 dark:text-gray-400 mt-4">
+                                        <strong>Causa-raiz:</strong> Falha na análise de requisitos do sistema, que não considerou a necessidade de múltiplos aprovadores.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Melhorando os Processos</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            Após identificar os problemas, podemos aplicar diferentes estratégias para melhorar os processos:
+                        </p>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <div class="flex items-center mb-2">
+                                    <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                                    </svg>
+                                    <h4 class="font-semibold text-gray-800 dark:text-white">Eliminar</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">
+                                    Remover atividades que não agregam valor ou são desnecessárias.
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                                    Ex: Eliminar aprovações duplicadas ou redundantes.
+                                </p>
+                            </div>
+                            
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <div class="flex items-center mb-2">
+                                    <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path d="M5 4a1 1 0 00-2 0v7.268a2 2 0 000 3.464V16a1 1 0 102 0v-1.268a2 2 0 000-3.464V4zM11 4a1 1 0 10-2 0v1.268a2 2 0 000 3.464V16a1 1 0 102 0V8.732a2 2 0 000-3.464V4zM16 3a1 1 0 011 1v7.268a2 2 0 010 3.464V16a1 1 0 11-2 0v-1.268a2 2 0 010-3.464V4a1 1 0 011-1z" />
+                                    </svg>
+                                    <h4 class="font-semibold text-gray-800 dark:text-white">Simplificar</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">
+                                    Reduzir a complexidade de processos e procedimentos.
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                                    Ex: Unificar formulários ou reduzir campos desnecessários.
+                                </p>
+                            </div>
+                            
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <div class="flex items-center mb-2">
+                                    <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M3 3a1 1 0 000 2h10a1 1 0 100-2H3zm0 4a1 1 0 000 2h6a1 1 0 100-2H3zm0 4a1 1 0 100 2h10a1 1 0 100-2H3z" clip-rule="evenodd" />
+                                    </svg>
+                                    <h4 class="font-semibold text-gray-800 dark:text-white">Padronizar</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">
+                                    Criar procedimentos padrão para garantir consistência.
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                                    Ex: Criar checklists de verificação de documentos.
+                                </p>
+                            </div>
+                            
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <div class="flex items-center mb-2">
+                                    <svg class="w-5 h-5 text-green-500 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                        <path fill-rule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clip-rule="evenodd" />
+                                    </svg>
+                                    <h4 class="font-semibold text-gray-800 dark:text-white">Automatizar</h4>
+                                </div>
+                                <p class="text-sm text-gray-600 dark:text-gray-300">
+                                    Usar tecnologia para realizar tarefas repetitivas.
+                                </p>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-2 italic">
+                                    Ex: Implementar formulários online com validação automática.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-6">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Atividade Prática: Identificação de Melhorias</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            Analise o processo abaixo e identifique oportunidades de melhoria:
+                        </p>
+                        
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 mb-4">
+                            <h4 class="font-medium text-gray-800 dark:text-white mb-3">Processo de Emissão de Certidões</h4>
+                            <ol class="list-decimal pl-5 text-gray-600 dark:text-gray-300 space-y-2">
+                                <li>Profissional solicita certidão via e-mail ou presencialmente</li>
+                                <li>Atendente registra solicitação em planilha Excel</li>
+                                <li>Atendente verifica no sistema se o profissional está em situação regular</li>
+                                <li>Se irregular, atendente informa ao profissional e encerra o processo</li>
+                                <li>Se regular, atendente imprime um modelo de certidão</li>
+                                <li>Atendente preenche os dados do profissional manualmente</li>
+                                <li>Atendente envia certidão para assinatura do coordenador</li>
+                                <li>Coordenador assina (prazo médio de 3 dias)</li>
+                                <li>Atendente digitaliza certidão assinada</li>
+                                <li>Atendente arquiva certidão física</li>
+                                <li>Atendente envia certidão digitalizada por e-mail ou entrega física ao profissional</li>
+                            </ol>
+                        </div>
+                        
+                        <div class="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg">
+                            <h4 class="font-medium text-gray-800 dark:text-white mb-2">Identifique as melhorias:</h4>
+                            <textarea class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300" rows="5" placeholder="Digite suas sugestões de melhoria para o processo..."></textarea>
+                            <button onclick="showPossibleImprovements()" class="mt-3 px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90">Ver possíveis melhorias</button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex justify-between mt-8">
+                        <button onclick="changeModule('module2')" class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Anterior
+                        </button>
+                        <button onclick="changeModule('module4')" class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 flex items-center">
+                            Próximo
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10.293 5.293a1 1 0 011.414 0l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414-1.414L12.586 11H5a1 1 0 110-2h7.586l-2.293-2.293a1 1 0 010-1.414z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Module 4: Exemplos Práticos -->
+                <div id="module4" class="module-content hidden">
+                    <h2 class="text-2xl font-bold mb-6 text-gray-800 dark:text-white">Módulo 4: Exemplos Práticos</h2>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Processo de Inscrição Profissional</h3>
+                        <p class="text-gray-600 dark:text-gray-300 mb-4">
+                            A seguir, apresentamos um exemplo de mapeamento do processo de inscrição profissional no Coren-GO, baseado no Manual de Procedimentos Administrativos do Cofen.
+                        </p>
+                        
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 mb-6">
+                            <div class="flex justify-between items-center mb-4">
+                                <h4 class="font-medium text-gray-800 dark:text-white">Fluxo do Processo</h4>
+                                <div>
+                                    <button onclick="openModal('bpmn')" class="px-3 py-1 text-xs bg-primary text-white rounded hover:bg-opacity-90">Ver em BPMN</button>
+                                </div>
+                            </div>
+                            
+                            <div class="overflow-x-auto">
+                                <svg width="800" height="300" class="mx-auto">
+                                    <!-- Swimlanes -->
+                                    <rect x="0" y="0" width="800" height="100" fill="#f3f4f6" class="dark:fill-gray-700" />
+                                    <rect x="0" y="100" width="800" height="100" fill="#edf2f7" class="dark:fill-gray-800" />
+                                    <rect x="0" y="200" width="800" height="100" fill="#f3f4f6" class="dark:fill-gray-700" />
+                                    
+                                    <!-- Lane Labels -->
+                                    <text x="20" y="50" class="text-gray-700 dark:text-gray-300">Profissional</text>
+                                    <text x="20" y="150" class="text-gray-700 dark:text-gray-300">Atendente</text>
+                                    <text x="20" y="250" class="text-gray-700 dark:text-gray-300">Coordenador</text>
+                                    
+                                    <!-- Boxes -->
+                                    <!-- Start -->
+                                    <circle cx="100" cy="50" r="20" fill="#5D5CDE" />
+                                    
+                                    <!-- Activities -->
+                                    <rect x="150" y="30" width="120" height="40" rx="5" fill="white" class="dark:fill-gray-800" stroke="#5D5CDE" />
+                                    <text x="210" y="55" text-anchor="middle" class="text-gray-700 dark:text-gray-300" style="font-size: 12px;">Solicita inscrição</text>
+                                    
+                                    <rect x="150" y="130" width="120" height="40" rx="5" fill="white" class="dark:fill-gray-800" stroke="#5D5CDE" />
+                                    <text x="210" y="155" text-anchor="middle" class="text-gray-700 dark:text-gray-300" style="font-size: 12px;">Recebe documentos</text>
+                                    
+                                    <rect x="300" y="130" width="120" height="40" rx="5" fill="white" class="dark:fill-gray-800" stroke="#5D5CDE" />
+                                    <text x="360" y="155" text-anchor="middle" class="text-gray-700 dark:text-gray-300" style="font-size: 12px;">Verifica documentos</text>
+                                    
+                                    <rect x="450" y="130" width="120" height="40" rx="5" fill="white" class="dark:fill-gray-800" stroke="#5D5CDE" />
+                                    <text x="510" y="155" text-anchor="middle" class="text-gray-700 dark:text-gray-300" style="font-size: 12px;">Registra no sistema</text>
+                                    
+                                    <rect x="450" y="230" width="120" height="40" rx="5" fill="white" class="dark:fill-gray-800" stroke="#5D5CDE" />
+                                    <text x="510" y="255" text-anchor="middle" class="text-gray-700 dark:text-gray-300" style="font-size: 12px;">Aprova inscrição</text>
+                                    
+                                    <rect x="600" y="130" width="120" height="40" rx="5" fill="white" class="dark:fill-gray-800" stroke="#5D5CDE" />
+                                    <text x="660" y="155" text-anchor="middle" class="text-gray-700 dark:text-gray-300" style="font-size: 12px;">Emite carteira</text>
+                                    
+                                    <!-- End -->
+                                    <circle cx="750" cy="50" r="20" fill="#5D5CDE" stroke="white" stroke-width="3" />
+                                    
+                                    <!-- Arrows -->
+                                    <line x1="120" y1="50" x2="150" y2="50" stroke="#5D5CDE" stroke-width="2" marker-end="url(#arrowhead)" class="flow-arrow" />
+                                    <line x1="210" y1="70" x2="210" y2="130" stroke="#5D5CDE" stroke-width="2" marker-end="url(#arrowhead)" class="flow-arrow" />
+                                    <line x1="270" y1="150" x2="300" y2="150" stroke="#5D5CDE" stroke-width="2" marker-end="url(#arrowhead)" class="flow-arrow" />
+                                    <line x1="420" y1="150" x2="450" y2="150" stroke="#5D5CDE" stroke-width="2" marker-end="url(#arrowhead)" class="flow-arrow" />
+                                    <line x1="510" y1="170" x2="510" y2="230" stroke="#5D5CDE" stroke-width="2" marker-end="url(#arrowhead)" class="flow-arrow" />
+                                    <line x1="570" y1="250" x2="660" y2="250" x2="660" y2="170" stroke="#5D5CDE" stroke-width="2" marker-end="url(#arrowhead)" class="flow-arrow" />
+                                    <line x1="660" y1="130" x2="660" y2="50" stroke="#5D5CDE" stroke-width="2" marker-end="url(#arrowhead)" class="flow-arrow" />
+                                    <line x1="660" y1="50" x2="730" y2="50" stroke="#5D5CDE" stroke-width="2" marker-end="url(#arrowhead)" class="flow-arrow" />
+                                    
+                                    <!-- Arrow definitions -->
+                                    <defs>
+                                        <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="0" refY="3.5" orient="auto">
+                                            <polygon points="0 0, 10 3.5, 0 7" fill="#5D5CDE" />
+                                        </marker>
+                                    </defs>
+                                </svg>
+                            </div>
+                        </div>
+                        
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-semibold text-gray-800 dark:text-white mb-3">Descrição do Processo</h4>
+                                <ol class="list-decimal pl-5 text-gray-600 dark:text-gray-300 space-y-2 text-sm">
+                                    <li>Profissional solicita inscrição presencialmente ou por meio digital;</li>
+                                    <li>Atendente recebe e confere a documentação conforme checklist;</li>
+                                    <li>Verifica se a documentação está completa e autêntica;</li>
+                                    <li>Registra as informações no sistema de cadastro;</li>
+                                    <li>Encaminha para aprovação do coordenador;</li>
+                                    <li>Coordenador verifica e aprova a inscrição;</li>
+                                    <li>Atendente emite a carteira profissional;</li>
+                                    <li>Profissional recebe a carteira profissional.</li>
+                                </ol>
+                            </div>
+                            
+                            <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                                <h4 class="font-semibold text-gray-800 dark:text-white mb-3">Indicadores de Desempenho</h4>
+                                <ul class="list-disc pl-5 text-gray-600 dark:text-gray-300 space-y-2 text-sm">
+                                    <li>Tempo médio de processamento da inscrição (do recebimento à emissão);</li>
+                                    <li>Percentual de processos com documentação completa na primeira tentativa;</li>
+                                    <li>Tempo médio de espera para aprovação do coordenador;</li>
+                                    <li>Número de inscrições processadas por atendente;</li>
+                                    <li>Índice de satisfação do profissional com o processo.</li>
+                                </ul>
+                                
+                                <div class="mt-4 bg-blue-50 dark:bg-gray-700 p-3 rounded">
+                                    <h5 class="font-medium text-blue-800 dark:text-blue-300 mb-1">Como monitorar:</h5>
+                                    <p class="text-sm text-blue-600 dark:text-blue-200">
+                                        Estabeleça um painel de controle com os indicadores acima e revise mensalmente com a equipe para identificar oportunidades de melhoria contínua.
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 mb-6">
+                            <h4 class="font-semibold text-gray-800 dark:text-white mb-3">Oportunidades de Melhoria Identificadas</h4>
+                            
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                                    <thead>
+                                        <tr>
+                                            <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Problema</th>
+                                            <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Causa</th>
+                                            <th class="px-4 py-3 bg-gray-50 dark:bg-gray-700 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Solução Proposta</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                        <tr>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Alto índice de documentação incompleta</td>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Falta de informações claras sobre os documentos necessários</td>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Criar página no site com checklist detalhado e vídeo explicativo</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Tempo de espera elevado para aprovação</td>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Apenas um coordenador autorizado a aprovar</td>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Ampliar o número de aprovadores ou automatizar a aprovação para casos padrão</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Retrabalho na verificação de documentos</td>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Falta de padronização entre atendentes</td>
+                                            <td class="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">Implementar formulário digital padronizado de verificação</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Implementando Melhorias: Um exemplo prático</h3>
+                        
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 mb-6">
+                            <h4 class="font-medium text-gray-800 dark:text-white mb-3">Caso: Melhoria no Processo de Registro de Certificados</h4>
+                            
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <p class="text-gray-600 dark:text-gray-300 text-sm mb-3">
+                                        <strong>Situação Inicial:</strong> O processo de registro de certificados de especialização levava em média 45 dias para ser concluído, gerando reclamações dos profissionais.
+                                    </p>
+                                    
+                                    <div class="bg-red-50 dark:bg-gray-700 p-3 rounded-lg mb-3">
+                                        <h5 class="font-medium text-red-800 dark:text-red-300 mb-1">Problemas Identificados:</h5>
+                                        <ul class="list-disc pl-5 text-sm text-red-600 dark:text-red-200 space-y-1">
+                                            <li>Documentos físicos transitando entre departamentos</li>
+                                            <li>Múltiplas aprovações desnecessárias</li>
+                                            <li>Ausência de priorização de processos</li>
+                                            <li>Falta de acompanhamento do status</li>
+                                            <li>Sistema não integrado</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                                
+                                <div>
+                                    <p class="text-gray-600 dark:text-gray-300 text-sm mb-3">
+                                        <strong>Melhorias Implementadas:</strong> Após o mapeamento e análise, as seguintes melhorias foram implementadas:
+                                    </p>
+                                    
+                                    <div class="bg-green-50 dark:bg-gray-700 p-3 rounded-lg mb-3">
+                                        <h5 class="font-medium text-green-800 dark:text-green-300 mb-1">Ações de Melhoria:</h5>
+                                        <ul class="list-disc pl-5 text-sm text-green-600 dark:text-green-200 space-y-1">
+                                            <li>Digitalização de todos os documentos na entrada</li>
+                                            <li>Redução de níveis de aprovação de 3 para 1</li>
+                                            <li>Implementação de sistema de rastreamento online</li>
+                                            <li>Criação de painel de controle para monitoramento</li>
+                                            <li>Integração do sistema de registro com o portal</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="mt-4">
+                                <h5 class="font-medium text-gray-800 dark:text-white mb-2">Resultados:</h5>
+                                <div class="flex flex-wrap gap-4">
+                                    <div class="bg-blue-50 dark:bg-gray-700 p-3 rounded-lg flex-1">
+                                        <div class="text-center">
+                                            <span class="block text-2xl font-bold text-blue-600 dark:text-blue-300">45 → 7</span>
+                                            <span class="text-sm text-blue-500 dark:text-blue-200">Dias para conclusão</span>
+                                        </div>
+                                    </div>
+                                    <div class="bg-blue-50 dark:bg-gray-700 p-3 rounded-lg flex-1">
+                                        <div class="text-center">
+                                            <span class="block text-2xl font-bold text-blue-600 dark:text-blue-300">85%</span>
+                                            <span class="text-sm text-blue-500 dark:text-blue-200">Redução de papel</span>
+                                        </div>
+                                    </div>
+                                    <div class="bg-blue-50 dark:bg-gray-700 p-3 rounded-lg flex-1">
+                                        <div class="text-center">
+                                            <span class="block text-2xl font-bold text-blue-600 dark:text-blue-300">92%</span>
+                                            <span class="text-sm text-blue-500 dark:text-blue-200">Satisfação do cliente</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-8">
+                        <h3 class="text-xl font-semibold mb-3 text-gray-800 dark:text-white">Próximos Passos</h3>
+                        
+                        <div class="bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                            <p class="text-gray-600 dark:text-gray-300 mb-4">
+                                Após este treinamento, você está preparado para começar a mapear e melhorar os processos do Coren-GO. Recomendamos seguir os seguintes passos:
+                            </p>
+                            
+                            <ol class="list-decimal pl-5 text-gray-600 dark:text-gray-300 space-y-3">
+                                <li>
+                                    <strong>Priorize os processos</strong> - Identifique processos críticos que afetam diretamente os profissionais de enfermagem ou que apresentam problemas frequentes.
+                                </li>
+                                <li>
+                                    <strong>Forme equipes multidisciplinares</strong> - Inclua colaboradores de diferentes áreas que participam do processo.
+                                </li>
+                                <li>
+                                    <strong>Aplique as técnicas aprendidas</strong> - Mapeie o estado atual, analise oportunidades de melhoria e desenhe o estado futuro.
+                                </li>
+                                <li>
+                                    <strong>Implemente pequenas melhorias</strong> - Comece com mudanças simples que possam trazer resultados rápidos para ganhar apoio.
+                                </li>
+                                <li>
+                                    <strong>Monitore os resultados</strong> - Estabeleça indicadores claros e acompanhe regularmente.
+                                </li>
+                                <li>
+                                    <strong>Compartilhe os sucessos</strong> - Divulgue os resultados positivos para incentivar novas melhorias.
+                                </li>
+                            </ol>
+                            
+                            <div class="mt-6 bg-yellow-50 dark:bg-gray-700 p-4 rounded-lg">
+                                <h4 class="font-medium text-yellow-800 dark:text-yellow-300 mb-2">Lembre-se:</h4>
+                                <p class="text-yellow-600 dark:text-yellow-200 text-sm">
+                                    O mapeamento e a melhoria de processos são atividades contínuas. À medida que o ambiente muda, os processos também precisam evoluir. Mantenha uma cultura de melhoria contínua e revise periodicamente os processos mapeados.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-green-50 dark:bg-gray-700 p-6 rounded-lg text-center mb-8">
+                        <h3 class="text-xl font-semibold text-green-800 dark:text-green-300 mb-3">Parabéns!</h3>
+                        <p class="text-green-600 dark:text-green-200 mb-4">
+                            Você concluiu o treinamento "Mapeando com o Coren-GO"!
+                        </p>
+                        <a href="#certificate" class="inline-block px-5 py-3 bg-primary text-white rounded-lg hover:bg-opacity-90 transition-all">
+                            Parabéns
+                        </a>
+                    </div>
+                    
+                    <div class="flex justify-between mt-8">
+                        <button onclick="changeModule('module3')" class="px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M9.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 011.414 1.414L7.414 9H15a1 1 0 110 2H7.414l2.293 2.293a1 1 0 010 1.414z" clip-rule="evenodd" />
+                            </svg>
+                            Anterior
+                        </button>
+                        <button onclick="changeModule('intro')" class="px-4 py-2 bg-primary text-white rounded hover:bg-opacity-90 flex items-center">
+                            Voltar ao Início
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 ml-2" viewBox="0 0 20 20" fill="currentColor">
+                                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.707-10.293a1 1 0 00-1.414-1.414l-3 3a1 1 0 000 1.414l3 3a1 1 0 001.414-1.414L9.414 11H13a1 1 0 100-2H9.414l1.293-1.293z" clip-rule="evenodd" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="bg-white dark:bg-gray-800 py-6 mt-10 border-t border-gray-200 dark:border-gray-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex flex-col md:flex-row justify-between items-center">
+                <div class="mb-4 md:mb-0">
+                    <p class="text-gray-600 dark:text-gray-300 text-sm">© 2025 Conselho Regional de Enfermagem de Goiás</p>
+                    <p class="text-gray-500 dark:text-gray-400 text-xs mt-1">Desenvolvido pelo escritorio de projetos Coren - Go</p>
+                </div>
+                <div class="flex space-x-4">
+                    <a href="https://www.corengo.org.br/" target="_blank" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-sm">
+                        Site Oficial
+                    </a>
+                    <a href="https://www.cofen.gov.br/" target="_blank" class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 text-sm">
+                        Cofen
+                    </a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Theme Toggle
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+            document.getElementById('dark-icon').classList.remove('hidden');
+            document.getElementById('light-icon').classList.add('hidden');
+        }
+        
+        document.getElementById('theme-toggle').addEventListener('click', function() {
+            if (document.documentElement.classList.contains('dark')) {
+                document.documentElement.classList.remove('dark');
+                document.getElementById('dark-icon').classList.remove('hidden');
+                document.getElementById('light-icon').classList.add('hidden');
+            } else {
+                document.documentElement.classList.add('dark');
+                document.getElementById('dark-icon').classList.add('hidden');
+                document.getElementById('light-icon').classList.remove('hidden');
+            }
+        });
+        
+        // Module Navigation
+        function changeModule(moduleId) {
+            // Hide all modules
+            document.querySelectorAll('.module-content').forEach(module => {
+                module.classList.remove('active');
+                module.classList.add('hidden');
+            });
+            
+            // Show selected module
+            const selectedModule = document.getElementById(moduleId);
+            selectedModule.classList.remove('hidden');
+            setTimeout(() => {
+                selectedModule.classList.add('active');
+            }, 50);
+            
+            // Update active state in sidebar
+            document.querySelectorAll('.module-btn').forEach(btn => {
+                btn.classList.remove('bg-primary', 'text-white');
+                if (btn.getAttribute('data-module') === moduleId) {
+                    btn.classList.add('bg-primary', 'text-white');
+                }
+            });
+        }
+        
+        // Quiz handling
+        document.getElementById('checkQuiz1').addEventListener('click', function() {
+            const quizOptions = document.querySelectorAll('#quiz1 .quiz-option');
+            
+            quizOptions.forEach(option => {
+                option.classList.remove('selected', 'correct', 'incorrect');
+                
+                if (option.classList.contains('selected')) {
+                    if (option.getAttribute('data-correct') === 'true') {
+                        option.classList.add('correct');
+                    } else {
+                        option.classList.add('incorrect');
+                    }
+                }
+            });
+            
+            // Show correct answers
+            quizOptions.forEach(option => {
+                if (option.getAttribute('data-correct') === 'true') {
+                    option.classList.add('correct');
+                }
+            });
+        });
+        
+        // Add click event to quiz options
+        document.querySelectorAll('.quiz-option').forEach(option => {
+            option.addEventListener('click', function() {
+                // Remove selected class from siblings
+                const parentDiv = this.parentElement;
+                parentDiv.querySelectorAll('.quiz-option').forEach(opt => {
+                    opt.classList.remove('selected');
+                });
+                
+                // Add selected class to clicked option
+                this.classList.add('selected');
+            });
+        });
+        
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(tab => {
+            tab.addEventListener('click', function() {
+                // Remove active class from all tabs
+                document.querySelectorAll('.tab-btn').forEach(t => {
+                    t.classList.remove('active', 'text-primary', 'border-primary');
+                    t.classList.add('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300', 'border-transparent');
+                });
+                
+                // Add active class to clicked tab
+                this.classList.add('active', 'text-primary', 'border-primary');
+                this.classList.remove('text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300', 'border-transparent');
+                
+                // Hide all tab content
+                document.querySelectorAll('.tab-content').forEach(content => {
+                    content.classList.remove('active');
+                    content.classList.add('hidden');
+                });
+                
+                // Show clicked tab content
+                const tabId = this.id.replace('tab', 'tabContent');
+                document.getElementById(tabId).classList.remove('hidden');
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+        
+        // Drag and drop functionality
+        let draggedElement = null;
+        
+        document.querySelectorAll('.drag-item').forEach(item => {
+            item.addEventListener('dragstart', function(e) {
+                draggedElement = this;
+                e.dataTransfer.setData('text/plain', this.dataset.type);
+                this.classList.add('opacity-50');
+            });
+            
+            item.addEventListener('dragend', function() {
+                this.classList.remove('opacity-50');
+            });
+        });
+        
+        const dropArea = document.getElementById('dropArea');
+        
+        dropArea.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            this.classList.add('active');
+        });
+        
+        dropArea.addEventListener('dragleave', function() {
+            this.classList.remove('active');
+        });
+        
+        dropArea.addEventListener('drop', function(e) {
+            e.preventDefault();
+            this.classList.remove('active');
+            
+            if (draggedElement) {
+                // Clear placeholder text if it's the first item
+                if (this.querySelector('p')) {
+                    this.innerHTML = '';
+                }
+                
+                const clone = draggedElement.cloneNode(true);
+                clone.classList.add('my-2');
+                
+                // Add appropriate styling based on element type
+                const type = draggedElement.dataset.type;
+                if (type === 'start' || type === 'end') {
+                    clone.classList.add('bg-blue-100', 'dark:bg-blue-900', 'border-blue-300', 'dark:border-blue-700');
+                } else if (type === 'decision') {
+                    clone.classList.add('bg-yellow-100', 'dark:bg-yellow-900', 'border-yellow-300', 'dark:border-yellow-700');
+                } else {
+                    clone.classList.add('bg-white', 'dark:bg-gray-800', 'border-gray-300', 'dark:border-gray-600');
+                }
+                
+                this.appendChild(clone);
+                
+                // Add a connector line if there are multiple items
+                if (this.children.length > 1) {
+                    const connector = document.createElement('div');
+                    connector.className = 'w-0.5 h-4 bg-gray-400 dark:bg-gray-500 mx-auto';
+                    this.insertBefore(connector, clone);
+                }
+            }
+        });
+        
+        // Reset flow button
+        document.getElementById('resetFlow').addEventListener('click', function() {
+            const dropArea = document.getElementById('dropArea');
+            dropArea.innerHTML = '<p class="text-center text-gray-400 dark:text-gray-500 pt-12">Arraste os elementos e solte aqui</p>';
+        });
+        
+        // Modal functionality
+        function openModal(type) {
+            const modal = document.getElementById('modal');
+            const modalTitle = document.getElementById('modal-title');
+            const modalContent = document.getElementById('modal-content');
+            
+            if (type === 'bpmn') {
+                modalTitle.textContent = 'Processo de Inscrição em BPMN';
+                modalContent.innerHTML = `
+                    <div class="bg-gray-50 dark:bg-gray-700 p-3 rounded-lg">
+                        <img src="https://i.imgur.com/DJJBuGU.png" alt="Modelo BPMN completo" class="mx-auto max-w-full">
+                    </div>
+                    <p class="mt-3 text-sm text-gray-500 dark:text-gray-400">O BPMN oferece uma notação mais rica que permite representar com mais detalhes os participantes, eventos, gateways e fluxos de mensagens do processo.</p>
+                `;
+            } else if (type === 'improvements') {
+                modalTitle.textContent = 'Possíveis Melhorias';
+                modalContent.innerHTML = `
+                    <ol class="list-decimal pl-5 text-gray-600 dark:text-gray-300 space-y-2">
+                        <li><strong>Automação:</strong> Implementar sistema que gere certidões automaticamente a partir dos dados do sistema, eliminando o preenchimento manual.</li>
+                        <li><strong>Assinatura digital:</strong> Adotar assinatura digital do coordenador, eliminando a necessidade de impressão e digitalização.</li>
+                        <li><strong>Autoatendimento:</strong> Permitir que profissionais regulares solicitem certidões diretamente pelo site, com verificação automática da situação.</li>
+                        <li><strong>Eliminação de etapas:</strong> Remover o arquivamento físico, mantendo apenas arquivo digital.</li>
+                        <li><strong>Delegação:</strong> Permitir que atendentes emitam certidões padrão sem necessidade de aprovação.</li>
+                    </ol>
+                `;
+            }
+            
+            modal.classList.remove('hidden');
+        }
+        
+        function closeModal() {
+            document.getElementById('modal').classList.add('hidden');
+        }
+        
+        function showPossibleImprovements() {
+            openModal('improvements');
+        }
+        
+        // Initialize first module
+        document.querySelector('.module-btn[data-module="intro"]').classList.add('bg-primary', 'text-white');
+    </script>
+</body>
+</html>
